@@ -3,7 +3,7 @@ import time
 import asyncio
 from typing import BinaryIO, Optional, Dict
 import aiohttp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, Message, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -49,30 +49,49 @@ class SubtitleBot:
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a message when the command /start is issued."""
-        keyboard = [
-            [
-                InlineKeyboardButton("Upload MKV File", callback_data="upload"),
-                InlineKeyboardButton("Download from URL", callback_data="url")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        welcome_text = (
+            "*Welcome to Subtitle Extractor Bot*\n\n"
+            "I can help you extract subtitles from MKV video files in various formats "
+            "(SRT, ASS, SUP) with proper language tags.\n\n"
+            "*Key Features:*\n"
+            "• Extract subtitles from MKV files\n"
+            "• Support multiple subtitle formats\n"
+            "• Language tag identification (eng, spa, ind, etc.)\n"
+            "• Direct file upload or URL download\n"
+            "• Real-time download progress\n\n"
+            "Use /help to see available commands and how to use them."
+        )
         
         await update.message.reply_text(
-            'Hi! I can help you extract subtitles from MKV videos.\n'
-            'Choose how you want to provide the video:',
-            reply_markup=reply_markup
+            welcome_text,
+            parse_mode='Markdown'
         )
     
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Send a message when the command /help is issued."""
         help_text = (
-            'I can extract subtitles from MKV videos in two ways:\n\n'
-            '1. Upload an MKV file directly to me\n'
-            '2. Provide a URL to download an MKV file\n\n'
-            'Supported subtitle formats: SRT, ASS, SUP\n\n'
-            'Use /start to begin!'
+            "*Available Commands*\n\n"
+            "1️*/extract {url}*\n"
+            "Extract subtitles from video at URL\n"
+            "Example: `/extract https://example.com/video.mkv`\n\n"
+            "2️*Upload + Caption*\n"
+            "Upload video and add `/extract` as caption\n\n"
+            "3️*Reply to Video*\n"
+            "Reply with `/extract` to any video message\n\n"
+            "*Notes:*\n"
+            "• Only MKV format is supported\n"
+            "• File size limit depends on Telegram's limits\n"
+            "• Use /cancel_<id> to cancel a download\n\n"
+            "*How to Use:*\n"
+            "1. Send video using any of the above methods\n"
+            "2. Wait for download and extraction\n"
+            "3. Receive extracted subtitle files\n"
+            "4. Each subtitle includes language code"
         )
-        await update.message.reply_text(help_text)
+        await update.message.reply_text(
+            help_text,
+            parse_mode='Markdown'
+        )
     
     async def download_video(self, file_id: str, context: ContextTypes.DEFAULT_TYPE) -> Optional[str]:
         """Download video file from Telegram"""
@@ -332,21 +351,31 @@ class SubtitleBot:
     async def handle_video(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle video file uploads"""
         try:
-            # Check if the file is an MKV
-            if not update.message.document or not update.message.document.file_name.lower().endswith('.mkv'):
-                await update.message.reply_text(
-                    'Please send an MKV video file.'
+            message = update if isinstance(update, Message) else update.message
+            document = message.document
+            
+            # Handle video messages by treating them as documents
+            if not document and message.video:
+                document = message.video
+            
+            # Validate file
+            if not document or (
+                not document.file_name.lower().endswith('.mkv') and
+                not document.mime_type == 'video/x-matroska'
+            ):
+                await message.reply_text(
+                    'Please send an MKV video file or use /help to see supported formats.'
                 )
                 return
             
             # Send processing message
-            status_message = await update.message.reply_text(
+            status_message = await message.reply_text(
                 'Processing your video file...'
             )
             
             # Download the video
             video_path = await self.download_video(
-                update.message.document.file_id,
+                document.file_id,
                 context
             )
             
@@ -356,13 +385,18 @@ class SubtitleBot:
                 )
                 return
             
-            await self.process_video_file(video_path, update, context, status_message)
+            await self.process_video_file(video_path, message, context, status_message)
             
         except Exception as e:
             logger.error(f"Error processing video: {e}")
-            await update.message.reply_text(
-                'Sorry, an error occurred while processing your video.'
-            )
+            if isinstance(update, Message):
+                await update.reply_text(
+                    'Sorry, an error occurred while processing your video.'
+                )
+            else:
+                await update.message.reply_text(
+                    'Sorry, an error occurred while processing your video.'
+                )
     
     async def handle_cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /cancel_<gid> commands"""
@@ -398,25 +432,61 @@ class SubtitleBot:
             logger.error(f"Error in cancel handler: {e}")
             await update.message.reply_text('Error processing cancel command.')
 
+    async def extract_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /extract command in various contexts"""
+        # Check if this is a reply to a video message
+        if update.message.reply_to_message and (
+            update.message.reply_to_message.document or 
+            update.message.reply_to_message.video
+        ):
+            # Handle reply to video
+            msg = update.message.reply_to_message
+            if msg.document:
+                await self.handle_video(msg, context)
+            elif msg.video:
+                # Convert video message to document-like object
+                msg.document = msg.video
+                await self.handle_video(msg, context)
+            return
+
+        # Check if command has URL parameter
+        if context.args:
+            url = context.args[0]
+            # Reuse existing url_handler but simulate message
+            update.message.text = url
+            await self.url_handler(update, context)
+            return
+
+        # If no URL or reply, send usage instructions
+        await update.message.reply_text(
+            "Please use /extract in one of these ways:\n"
+            "1. `/extract {url}` - Extract from URL\n"
+            "2. Upload video with `/extract` as caption\n"
+            "3. Reply `/extract` to a video message",
+            parse_mode='Markdown'
+        )
+
     def run(self):
         """Start the bot."""
         # Create application
         application = Application.builder().token(self.token).build()
         
-        # Create conversation handler for URL input
-        conv_handler = ConversationHandler(
-            entry_points=[CallbackQueryHandler(self.button_handler)],
-            states={
-                self.WAITING_FOR_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, self.url_handler)]
-            },
-            fallbacks=[CommandHandler("start", self.start)]
-        )
-        
         # Add handlers
         application.add_handler(CommandHandler("start", self.start))
         application.add_handler(CommandHandler("help", self.help_command))
-        application.add_handler(conv_handler)
-        application.add_handler(MessageHandler(filters.Document.ALL, self.handle_video))
+        application.add_handler(CommandHandler("extract", self.extract_command))
+        
+        # Handle videos with /extract caption
+        application.add_handler(MessageHandler(
+            filters.Document.ALL & filters.Caption('^/extract'),
+            self.handle_video
+        ))
+        
+        # Handle regular video uploads (backward compatibility)
+        application.add_handler(MessageHandler(
+            filters.Document.ALL,
+            self.handle_video
+        ))
         
         # Add cancel command handler - must match /cancel_<gid> pattern
         application.add_handler(MessageHandler(
