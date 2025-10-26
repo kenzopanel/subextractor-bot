@@ -1,0 +1,10 @@
+python-telegram-bot>=20.0
+ffmpeg-python
+pysrt
+ass
+pymkv
+python-dotenv
+aiohttp
+aria2p
+validators
+psutil
