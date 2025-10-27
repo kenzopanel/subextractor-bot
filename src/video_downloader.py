@@ -1,17 +1,10 @@
-import os
-import time
-import asyncio
+import os, time, aria2p, validators
 from typing import Optional
-import aria2p
-import validators
 from urllib.parse import urlparse
 
 
 class VideoDownloader:
-    """Wrapper around aria2p for starting and managing downloads via aria2 RPC.
-
-    Assumes an aria2 RPC server is available (aria2c --enable-rpc ...).
-    """
+    """Wrapper around aria2p for starting and managing downloads via aria2 RPC."""
 
     def __init__(self, temp_dir: str, host: str = "http://localhost", port: int = 6800, secret: str = ""):
         self.temp_dir = temp_dir
@@ -21,19 +14,19 @@ class VideoDownloader:
         """Start a download and return the aria2 GID (string) or None on failure."""
         try:
             if not validators.url(url):
-                return None
+                raise ValueError(f"Invalid URL: {url}")
 
             parsed = urlparse(url)
-            filename = out_filename or os.path.basename(parsed.path) or "video.mkv"
+            filename = out_filename or os.path.basename(parsed.path) or f"video_{int(time.time())}.mkv"
             if not filename.lower().endswith('.mkv'):
-                # force mkv extension if not present
                 filename = filename + '.mkv'
 
-            # Ensure temp dir exists
             os.makedirs(self.temp_dir, exist_ok=True)
-
             download = self.aria2.add_uris([url], {'dir': self.temp_dir, 'out': filename})
-            # aria2p returns a Download object
+            
+            if not download:
+                raise RuntimeError("Failed to start download")
+            
             return download.gid
         except Exception as e:
             print(f"VideoDownloader.start_download error: {e}")
@@ -43,7 +36,6 @@ class VideoDownloader:
         """Return an aria2p.Download object for the given gid (or None)."""
         try:
             dl = self.aria2.get_download(gid)
-            # Refresh info
             dl.update()
             return dl
         except Exception:
@@ -53,7 +45,6 @@ class VideoDownloader:
         """Cancel (remove) the download and return True if succeeded."""
         try:
             dl = self.aria2.get_download(gid)
-            # remove the download and delete file
             self.aria2.remove([dl])
             return True
         except Exception:

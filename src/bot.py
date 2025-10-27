@@ -19,10 +19,8 @@ from .subtitle_extractor import SubtitleExtractor
 from .video_downloader import VideoDownloader
 from .system_stats import SystemStats
 
-# Load environment variables
 load_dotenv()
 
-# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -35,12 +33,9 @@ class SubtitleBot:
     
     def __init__(self):
         self.token = os.getenv('TELEGRAM_BOT_TOKEN')
-        self.temp_dir = '/usr/src/app/downloads'
-        
-        # Create temp directory if it doesn't exist
+        self.temp_dir = os.getenv('TEMP_DIR', '/usr/src/app/downloads')
         os.makedirs(self.temp_dir, exist_ok=True)
         
-        # Initialize components
         self.video_downloader = VideoDownloader(self.temp_dir)
         self.system_stats = SystemStats()
         
@@ -71,12 +66,12 @@ class SubtitleBot:
         """Send a message when the command /help is issued."""
         help_text = (
             "*Available Commands*\n\n"
-            "1️*/extract {url}*\n"
+            "1. */extract {url}*\n"
             "Extract subtitles from video at URL\n"
             "Example: `/extract https://example.com/video.mkv`\n\n"
-            "2️*Upload + Caption*\n"
+            "2. *Upload + Caption*\n"
             "Upload video and add `/extract` as caption\n\n"
-            "3️*Reply to Video*\n"
+            "3. *Reply to Video*\n"
             "Reply with `/extract` to any video message\n\n"
             "*Notes:*\n"
             "• Only MKV format is supported\n"
@@ -167,21 +162,6 @@ class SubtitleBot:
             await update.message.reply_text(
                 'Sorry, an error occurred while processing your video.'
             )
-    
-    async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle button clicks"""
-        query = update.callback_query
-        await query.answer()
-        
-        if query.data == "upload":
-            await query.edit_message_text(
-                "Please send me your MKV video file."
-            )
-        elif query.data == "url":
-            await query.edit_message_text(
-                "Please send me the URL of the MKV video."
-            )
-            return self.WAITING_FOR_URL
     
     def format_size(self, size_bytes: float) -> str:
         """Format bytes to human readable string."""

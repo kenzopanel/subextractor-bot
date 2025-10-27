@@ -19,7 +19,6 @@ def test_imports():
         import ffmpeg
         import pysrt
         import ass
-        import pymkv
         print("✓ All external dependencies imported successfully")
     except ImportError as e:
         print(f"✗ Import error: {e}")
@@ -28,7 +27,6 @@ def test_imports():
 def test_video_downloader():
     """Test VideoDownloader initialization and basic methods"""
     try:
-        # Use the production download directory
         download_dir = os.getenv("TEMP_DIR", "/downloads")
         if not os.path.exists(download_dir):
             download_dir = os.path.join(download_dir)
