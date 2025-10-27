@@ -5,7 +5,9 @@ __pycache__/
 *.so
 .Python
 .env
+
 Dockerfile
+local.start.sh
 
 # Virtual Environment
 .venv/
@@ -19,7 +21,7 @@ ENV/
 *.swo
 
 # Project specific
-temp_downloads/
+downloads/
 *.mkv
 *.srt
 *.ass

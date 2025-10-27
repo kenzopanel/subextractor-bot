@@ -1,13 +1,13 @@
 import os, time, aria2p, validators
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 class VideoDownloader:
     """Wrapper around aria2p for starting and managing downloads via aria2 RPC."""
 
-    def __init__(self, temp_dir: str, host: str = "http://localhost", port: int = 6800, secret: str = ""):
-        self.temp_dir = temp_dir
+    def __init__(self, download_dir: str, host: str = "http://localhost", port: int = 6800, secret: str = ""):
+        self.download_dir = download_dir
         self.aria2 = aria2p.API(aria2p.Client(host=host, port=port, secret=secret))
 
     def start_download(self, url: str, out_filename: Optional[str] = None) -> Optional[str]:
@@ -21,11 +21,15 @@ class VideoDownloader:
             if not filename.lower().endswith('.mkv'):
                 filename = filename + '.mkv'
 
-            os.makedirs(self.temp_dir, exist_ok=True)
-            download = self.aria2.add_uris([url], {'dir': self.temp_dir, 'out': filename})
+            filename = unquote(filename)
+            os.makedirs(self.download_dir, exist_ok=True)
+            download = self.aria2.add_uris([url], {'dir': self.download_dir, 'out': filename})
             
             if not download:
                 raise RuntimeError("Failed to start download")
+                
+            # Set start time as Unix timestamp
+            download.start_time = time.time()
             
             return download.gid
         except Exception as e:
@@ -44,11 +48,42 @@ class VideoDownloader:
     def cancel_download(self, gid: str) -> bool:
         """Cancel (remove) the download and return True if succeeded."""
         try:
-            dl = self.aria2.get_download(gid)
-            self.aria2.remove([dl])
-            return True
+            download = self.get_download(gid)
+            if download:
+                return download.remove(force=True, files=True)
+            return True  # Already gone
         except Exception:
             return False
+
+    def cancel(self, gid: str) -> bool:
+        """Alias for cancel_download for compatibility."""
+        return self.cancel_download(gid)
+
+    def cleanup(self):
+        """Cancel all downloads and clean up any temporary files."""
+        try:
+            # Remove all downloads
+            downloads = self.aria2.get_downloads()
+            for download in downloads:
+                try:
+                    download.remove(force=True, files=True)
+                except Exception as e:
+                    print(f"Error removing download {download.gid}: {e}")
+        except Exception as e:
+            print(f"Error in cleanup: {e}")
+        
+        # Try to clean up the download directory
+        try:
+            if os.path.exists(self.download_dir):
+                for filename in os.listdir(self.download_dir):
+                    filepath = os.path.join(self.download_dir, filename)
+                    try:
+                        if os.path.isfile(filepath):
+                            os.remove(filepath)
+                    except Exception as e:
+                        print(f"Error removing file {filepath}: {e}")
+        except Exception as e:
+            print(f"Error cleaning download directory: {e}")
 
     def get_global_stats(self) -> dict:
         """Return aria2 global stats (download/upload speed etc.) as dict."""

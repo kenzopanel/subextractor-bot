@@ -7,7 +7,6 @@ mkdir -p /tmp/aria2
 aria2c --conf-path=/app/aria2.conf \
         --rpc-listen-all=true \
         --rpc-allow-origin-all=true \
-        --rpc-secret="" \
         --continue=true
 
 # Wait for aria2c to start
