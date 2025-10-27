@@ -10,7 +10,7 @@ from src.video_downloader import VideoDownloader
 def test_video_downloader():
     """Test VideoDownloader functionality"""
     try:
-        download_dir = os.getenv("TEMP_DIR", "/downloads")
+        download_dir = os.getenv("DOWNLOAD_DIR", "/tmp/downloads")
         if not os.path.exists(download_dir):
             download_dir = os.path.join(download_dir)
             os.makedirs(download_dir, exist_ok=True)

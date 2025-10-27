@@ -28,15 +28,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SubtitleBot:
-    # Conversation states
     WAITING_FOR_URL = 1
     
     def __init__(self):
         self.token = os.getenv('TELEGRAM_BOT_TOKEN')
-        self.temp_dir = os.getenv('TEMP_DIR', '/usr/src/app/downloads')
-        os.makedirs(self.temp_dir, exist_ok=True)
+        self.download_dir = os.getenv('DOWNLOAD_DIR', '/tmp/downloads')
+        os.makedirs(self.download_dir, exist_ok=True)
         
-        self.video_downloader = VideoDownloader(self.temp_dir)
+        self.video_downloader = VideoDownloader(self.download_dir)
         self.system_stats = SystemStats()
         
         # Track active downloads: gid -> message_id
@@ -92,7 +91,7 @@ class SubtitleBot:
         """Download video file from Telegram"""
         try:
             file = await context.bot.get_file(file_id)
-            temp_path = os.path.join(self.temp_dir, f"{file_id}.mkv")
+            temp_path = os.path.join(self.download_dir, f"{file_id}.mkv")
             await file.download_to_drive(temp_path)
             return temp_path
         except Exception as e:
@@ -275,7 +274,7 @@ class SubtitleBot:
                 return ConversationHandler.END
                 
             if download.is_complete:
-                video_path = os.path.join(self.temp_dir, download.name)
+                video_path = os.path.join(self.download_dir, download.name)
                 if os.path.exists(video_path):
                     await self.process_video_file(video_path, update, context, status_message)
                     return ConversationHandler.END
