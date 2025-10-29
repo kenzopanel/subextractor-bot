@@ -5,9 +5,7 @@ __pycache__/
 *.so
 .Python
 .env
-
-Dockerfile
-local.start.sh
+*.bak
 
 # Virtual Environment
 .venv/
@@ -17,12 +15,16 @@ ENV/
 # IDE
 .idea/
 .vscode/
+.github/
 *.swp
 *.swo
 
 # Project specific
+tests/
 downloads/
 *.mkv
 *.srt
 *.ass
 *.sup
+Dockerfile
+local.start.sh

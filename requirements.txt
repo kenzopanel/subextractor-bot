@@ -7,3 +7,4 @@ aiohttp
 aria2p
 validators
 psutil
+uvloop
