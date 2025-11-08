@@ -1,5 +1,6 @@
-import os, logging, asyncio
+import os, logging, asyncio, mimetypes, aiohttp
 from typing import Dict, Any
+from urllib.parse import urlparse
 from telegram.ext import ContextTypes
 from .video_downloader import VideoDownloader
 from .subtitle_processor import SubtitleProcessor
@@ -24,8 +25,15 @@ class TaskProcessor:
             task.start()
             
             if task.url:
-                await self._handle_url_download(task)
+                if task.file_path and not os.path.exists(task.file_path):
+                    task.file_path = None
+                if not task.file_path:
+                    await self._handle_url_download(task)
+                else:
+                    await self._handle_local_file(task)
             elif task.file_path:
+                if not os.path.exists(task.file_path):
+                    raise ValueError("Video file does not exist. Please provide a valid file or URL.")
                 await self._handle_local_file(task)
             else:
                 raise ValueError("No URL or video file provided")
@@ -54,41 +62,57 @@ class TaskProcessor:
     
     async def _handle_url_download(self, task: SubtitleTask) -> None:
         """Handle downloading video from URL"""
+        url_path = urlparse(task.url).path
+        mime, _ = mimetypes.guess_type(url_path)
+        if mime and not (mime == "video/x-matroska" or mime == "video/mkv" or mime == "video/webm"):
+            raise RuntimeError(f"File type {mime} is not supported")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.head(task.url, allow_redirects=True, timeout=10) as resp:
+                    if resp.status != 200:
+                        raise RuntimeError(f"Error URL returned status code {resp.status}.")
+        except Exception as e:
+            raise RuntimeError(f"Failed to access URL: {e}")
+
         task.status = TaskStatus.DOWNLOADING
         gid = self.video_downloader.start_download(task.url)
         if not gid:
             raise RuntimeError("Failed to start download")
-            
+
         task.gid = gid
-        
+
         while True:
             download = self.video_downloader.get_download(gid)
             if not download:
                 raise RuntimeError("Download not found")
-                
+
             if download.has_failed:
                 raise RuntimeError(f"Download failed: {download.error_message}")
-                
+
             if download.is_complete:
+                file_ext = os.path.splitext(download.name)[1].lower()
+                if file_ext != ".mkv":
+                    raise RuntimeError("Downloaded file is not an MKV video.")
                 task.file_path = os.path.join(self.download_dir, download.name)
                 break
-                
+
             download.update()
             downloaded = download.completed_length
             total = download.total_length
             speed = download.download_speed
-            
+
             if total > 0:
                 progress = (downloaded / total * 100)
             else:
                 progress = float(download.progress) if download.progress else 0
-                
+
             if download.has_failed:
                 raise RuntimeError(f"Download failed: {download.error_message}")
-            
+
             task.update_progress(progress, speed, downloaded, total)
             await asyncio.sleep(1)
-            
+
         await self._handle_local_file(task)
     
     async def _handle_local_file(self, task: SubtitleTask) -> None:
@@ -121,11 +145,13 @@ class TaskProcessor:
             raise
             
         finally:
-            if task.gid and os.path.exists(task.file_path):
+            if task.status == TaskStatus.UPLOADING and task.file_path and os.path.exists(task.file_path):
                 try:
                     os.remove(task.file_path)
                 except Exception as e:
                     logger.warning(f"Failed to remove file {task.file_path}: {e}")
+                finally:
+                    task.file_path = None
     
     async def _cleanup_task(self, task: SubtitleTask) -> None:
         """Clean up task resources"""
@@ -138,6 +164,8 @@ class TaskProcessor:
                     os.remove(task.file_path)
                 except Exception as e:
                     logger.warning(f"Failed to remove video file {task.file_path}: {e}")
+                finally:
+                    task.file_path = None
                     
             if task.output_files:
                 for file_path in task.output_files:

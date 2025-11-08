@@ -1,9 +1,4 @@
-import os
-import sys
-import signal
-import logging
-import asyncio
-import subprocess
+import os, sys, signal, logging, asyncio, subprocess
 from typing import List, Optional, Callable, Set
 from asyncio import Task
 
@@ -139,8 +134,17 @@ class ProcessRunner:
                 stderr_str = stderr.decode(errors="replace").strip()
                 if len(stderr_str) > 500:
                     stderr_str = stderr_str[:500] + "..."
+                if not stderr_str:
+                    stdout_str = stdout.decode(errors="replace").strip()
+                    if len(stdout_str) > 500:
+                        stdout_str = stdout_str[:500] + "..."
+                    if stdout_str:
+                        stderr_str = stdout_str
+                    else:
+                        stderr_str = f"Process failed with exit code {process.returncode}: {' '.join(cmd)}"
+                   
                 raise RuntimeError(stderr_str)
-                
+            
             return stdout.decode(errors="replace").strip()
             
         except Exception as e:

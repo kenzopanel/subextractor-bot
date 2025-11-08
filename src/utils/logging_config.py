@@ -52,7 +52,7 @@ def configure_logging(log_level: str = "DEBUG") -> LimitedStringIO:
     old_error = logging.Logger.error
 
     def patched_error(self, msg, *args, **kwargs):
-        kwargs.setdefault("exc_info", True)
+        # kwargs.setdefault("exc_info", True)
         return old_error(self, msg, *args, **kwargs)
 
     logging.Logger.error = patched_error
@@ -70,7 +70,7 @@ def configure_module_loggers() -> None:
         "subtitle_extractor_bot.models": logging.INFO,
         "httpx": logging.WARNING,
         "telegram": logging.INFO,
-        "aria2p": logging.INFO
+        # "aria2p": logging.INFO
     }
     
     for module, level in modules.items():

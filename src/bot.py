@@ -115,7 +115,6 @@ class SubtitleBot:
                 logger.info("Starting bot...")
                 app.run_polling()
             finally:
-                # Clean up resources
                 if hasattr(self.command_handler, 'task_processor'):
                     self.command_handler.task_processor.cleanup()
                 if hasattr(self, 'aria2_service'):

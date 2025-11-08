@@ -30,13 +30,14 @@ class Aria2Service:
             pids = set()
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
-                    if proc.info['name'] == 'aria2c':
-                        pids.add(proc.info['pid'])
+                    name = proc.info.get('name')
+                    pid = proc.info.get('pid')
+                    if name == 'aria2c' and pid is not None:
+                        pids.add(pid)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
             return pids
-        except Exception as e:
-            logger.warning(f"Failed to find aria2c processes: {e}")
+        except Exception:
             return set()
 
     def _kill_existing_aria2c(self) -> None:
@@ -76,21 +77,23 @@ class Aria2Service:
             
             proc = await self.process_runner.run_command(cmd, timeout=10, wait=False)
             if not proc:
-                logger.error("Failed to start aria2c process")
+                logger.error("Failed to start aria2c service")
                 return False
             
-            logger.debug(f"Aria2c process started with PID: {proc.pid}")
+            logger.debug(f"Aria2c service started with PID: {proc.pid}")
             self._process = proc
             
             await asyncio.sleep(0.5)
             
             try:
-                parent = psutil.Process(proc.pid)
-                children = parent.children(recursive=True)
-                self._child_pids = {child.pid for child in children}
-                self._child_pids.add(proc.pid)
+                await asyncio.sleep(0.5)
+                self._child_pids = self._find_aria2c_processes()
+                if not self._child_pids:
+                    logger.warning("No aria2c daemon PIDs found after launch.")
+                else:
+                    logger.debug(f"Tracking aria2c daemon PIDs: {self._child_pids}")
             except Exception as e:
-                logger.warning(f"Failed to store child process IDs: {e}")
+                logger.warning(f"Failed to find aria2c daemon PIDs: {e}")
             
             retries = 5
             while retries > 0:
@@ -99,7 +102,6 @@ class Aria2Service:
                     client = aria2p.Client(host=self.host, port=self.port, secret=self.secret)
                     self.client = aria2p.API(client)
                     
-                    # Test connection
                     version = self.client.client.get_version()
                     if not version:
                         logger.error("Failed to get aria2c version")
@@ -168,10 +170,6 @@ class Aria2Service:
                 logger.debug("No client available")
                 return False
 
-            if self._process and self._process.returncode is not None:
-                logger.debug(f"Process has exited with code: {self._process.returncode}")
-                return False
-            
             try:
                 version = self.client.client.get_version()
                 logger.debug(f"API connection successful, version: {version}")
@@ -195,10 +193,10 @@ class Aria2Service:
                 logger.debug("Service is alive, returning client")
                 return self.client
             
-            logger.debug("Service is not alive")
+            logger.error("Service is disconnected")
             return None
         except Exception as e:
-            logger.debug(f"Error checking client: {e}")
+            logger.error(f"Error checking client: {e}")
             return None
         except Exception as e:
             logger.error(f"Error getting aria2 client: {e}")

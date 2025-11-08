@@ -31,10 +31,14 @@ class SubtitleProcessor:
         
     async def extract_subtitles(self, video_path: str, task: SubtitleTask) -> List[Dict]:
         """Extract subtitles from video file using nice priority"""
+        if not os.path.isabs(video_path):
+            video_path = os.path.join(os.environ['APP_DIR'], video_path)
+        
         if sys.platform == "win32":
             cmd = ['mkvmerge', '-J', video_path]
         else:
-            cmd = ['nice', f'-n{self.process_runner.nice_level}', 'mkvmerge', '-J', video_path]
+            cmd = ['nice', f'-{self.process_runner.nice_level}', 'mkvmerge', '-J', video_path]
+        
         result = await self.process_runner.run_command(cmd)
         
         try:

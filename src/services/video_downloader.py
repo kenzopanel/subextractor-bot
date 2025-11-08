@@ -43,12 +43,23 @@ class VideoDownloader:
             time.sleep(0.5)
             if not download:
                 raise RuntimeError("Failed to start download")
-                
+
             time.sleep(1)
             download.update()
+            if getattr(download, 'status', None) == 'error' or getattr(download, 'error_message', None):
+                raise RuntimeError(f"Download failed to start: {getattr(download, 'error_message', 'Unknown error')}")
             if download.has_failed:
                 raise RuntimeError(f"Download failed to start: {download.error_message}")
-                
+
+            if getattr(download, 'status', None) == 'complete':
+                file_path = os.path.join(self.download_dir, download.name)
+                if not os.path.exists(file_path):
+                    raise RuntimeError(f"Download complete but file does not exist: {file_path}")
+                min_size = 1024 * 1024  # 1MB
+                actual_size = os.path.getsize(file_path)
+                if actual_size < min_size:
+                    raise RuntimeError(f"Downloaded file is too small: {file_path}")
+
             return download.gid
         except Exception as e:
             logger.error(f"Failed to start download: {e}")

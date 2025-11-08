@@ -40,8 +40,10 @@ class CommandHandler:
     def __init__(self, task_queue: TaskQueue, aria2_service: Aria2Service):
         """Initialize command handler with a task queue.
         The handler will manage its own instances of other required services."""
+        download_dir = os.getenv('DOWNLOAD_DIR', '/tmp/download/')
+        download_dir = os.path.join(os.environ['APP_DIR'], download_dir.lstrip('/'))
         self.task_queue = task_queue
-        self.download_dir = os.getenv('DOWNLOAD_DIR', '/tmp/downloads/')
+        self.download_dir = download_dir
         self.update_interval = float(os.getenv('UPDATE_INTERVAL', '10.0'))
         self.task_processor = TaskProcessor(self.download_dir, aria2_service)
         self.message_handler = MessageHandler()
@@ -644,14 +646,16 @@ class CommandHandler:
             if os.path.exists(sub_file):
                 try:
                     os.remove(sub_file)
-                    logger.info(f"Cleaned up subtitle file: {sub_file}")
+                    logger.debug(f"Cleaned up subtitle file: {sub_file}")
                 except Exception as e:
                     logger.warning(f"Failed to clean up subtitle file {sub_file}: {e}")
         
         if task.file_path and os.path.exists(task.file_path):
             try:
                 os.remove(task.file_path)
-                logger.info(f"Cleaned up video file: {task.file_path}")
+                if os.path.exists(f"{task.file_path}.aria2"):
+                    os.remove(f"{task.file_path}.aria2")
+                logger.debug(f"Cleaned up video file: {task.file_path}")
             except Exception as e:
                 logger.warning(f"Failed to clean up video file {task.file_path}: {e}")
 

@@ -21,7 +21,7 @@ ENV/
 
 # Project specific
 tests/
-downloads/
+download/
 *.mkv
 *.srt
 *.ass
